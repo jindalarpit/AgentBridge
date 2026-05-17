@@ -1,0 +1,25 @@
+# 2026/05/16 16:38:46.769230 [TestProperty_BindingReplacement_MessagesPreserved] [rapid] draw num_runtimes: 2
+# 2026/05/16 16:38:46.769241 [TestProperty_BindingReplacement_MessagesPreserved] [rapid] draw num_messages: 1
+# 2026/05/16 16:38:46.769243 [TestProperty_BindingReplacement_MessagesPreserved] [rapid] draw content_0: " "
+# 2026/05/16 16:38:46.769245 [TestProperty_BindingReplacement_MessagesPreserved] [rapid] draw num_rebinds: 1
+# 2026/05/16 16:38:46.769246 [TestProperty_BindingReplacement_MessagesPreserved] [rapid] draw rebind_idx_0: 0
+# 2026/05/16 16:38:46.769247 [TestProperty_BindingReplacement_MessagesPreserved] message 0 content mismatch: got "message-0-", want "message-0- "
+# 
+v0.4.8#4089474659476961418
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x5555555555555
+0x0
+0xc05c654ab866b
+0x14
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0

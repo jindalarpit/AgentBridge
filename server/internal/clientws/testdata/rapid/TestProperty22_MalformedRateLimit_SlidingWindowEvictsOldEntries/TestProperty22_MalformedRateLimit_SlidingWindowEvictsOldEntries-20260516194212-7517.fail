@@ -1,0 +1,55 @@
+# 2026/05/16 19:42:12.427910 [TestProperty22_MalformedRateLimit_SlidingWindowEvictsOldEntries] [rapid] draw oldCount: 4
+# 2026/05/16 19:42:12.427913 [TestProperty22_MalformedRateLimit_SlidingWindowEvictsOldEntries] [rapid] draw oldOffsetMs: 1001
+# 2026/05/16 19:42:12.427914 [TestProperty22_MalformedRateLimit_SlidingWindowEvictsOldEntries] [rapid] draw oldOffsetMs: 0
+# 2026/05/16 19:42:12.427918 [TestProperty22_MalformedRateLimit_SlidingWindowEvictsOldEntries] [rapid] draw oldOffsetMs: 0
+# 2026/05/16 19:42:12.427918 [TestProperty22_MalformedRateLimit_SlidingWindowEvictsOldEntries] [rapid] draw oldOffsetMs: 0
+# 2026/05/16 19:42:12.427919 [TestProperty22_MalformedRateLimit_SlidingWindowEvictsOldEntries] [rapid] draw newCount: 7
+# 2026/05/16 19:42:12.427920 [TestProperty22_MalformedRateLimit_SlidingWindowEvictsOldEntries] [rapid] draw newOffsetMs: 0
+# 2026/05/16 19:42:12.427920 [TestProperty22_MalformedRateLimit_SlidingWindowEvictsOldEntries] [rapid] draw newOffsetMs: 0
+# 2026/05/16 19:42:12.427920 [TestProperty22_MalformedRateLimit_SlidingWindowEvictsOldEntries] [rapid] draw newOffsetMs: 0
+# 2026/05/16 19:42:12.427921 [TestProperty22_MalformedRateLimit_SlidingWindowEvictsOldEntries] [rapid] draw newOffsetMs: 0
+# 2026/05/16 19:42:12.427922 [TestProperty22_MalformedRateLimit_SlidingWindowEvictsOldEntries] [rapid] draw newOffsetMs: 0
+# 2026/05/16 19:42:12.427922 [TestProperty22_MalformedRateLimit_SlidingWindowEvictsOldEntries] [rapid] draw newOffsetMs: 0
+# 2026/05/16 19:42:12.427922 [TestProperty22_MalformedRateLimit_SlidingWindowEvictsOldEntries] [rapid] draw newOffsetMs: 0
+# 2026/05/16 19:42:12.427923 [TestProperty22_MalformedRateLimit_SlidingWindowEvictsOldEntries] connection should NOT be closed: old messages should have expired. Old count: 4, new count so far: 7 (message 7 triggered close)
+# 
+v0.4.8#8831450312321449210
+0x0
+0x38e38e38e38e4
+0x3
+0x0
+0x13c7f3da402fdd
+0x3e9
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x6b74f03291620
+0x6
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0

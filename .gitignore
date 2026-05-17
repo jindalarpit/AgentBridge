@@ -1,0 +1,29 @@
+# Kiro
+.kiro/
+
+# Environment files
+.env
+.env.local
+.env*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Node
+node_modules/
+
+# Next.js
+frontend/.next/
+frontend/out/
+
+# Go binary
+daemon/agentbridge-daemon
+
+# Server
+server/node_modules/
+server/dist/
