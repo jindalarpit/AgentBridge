@@ -32,11 +32,12 @@ type RouterConfig struct {
 
 // RouterDeps holds the dependencies needed to wire the HTTP router.
 type RouterDeps struct {
-	AuthHandler    *AuthHandler
-	SessionHandler *SessionHandler
-	RuntimeHandler *RuntimeHandler
-	ClientHub      *clientws.Hub
-	DaemonHub      *daemonws.Hub
+	AuthHandler        *AuthHandler
+	SessionHandler     *SessionHandler
+	RuntimeHandler     *RuntimeHandler
+	DaemonTokenHandler *DaemonTokenHandler
+	ClientHub          *clientws.Hub
+	DaemonHub          *daemonws.Hub
 }
 
 // NewRouter creates a Chi router with all middleware and routes mounted.
@@ -96,7 +97,17 @@ func NewRouter(cfg RouterConfig, deps RouterDeps) chi.Router {
 
 		// Runtime routes.
 		r.Get("/api/runtimes", deps.RuntimeHandler.ListRuntimes)
+
+		// Daemon token routes.
+		if deps.DaemonTokenHandler != nil {
+			r.Post("/api/daemon-tokens", deps.DaemonTokenHandler.CreateToken)
+		}
 	})
+
+	// --- Daemon Token Auth Routes (authenticated with ab_ token, not JWT) ---
+	if deps.DaemonTokenHandler != nil {
+		r.Delete("/api/daemon-tokens/current", deps.DaemonTokenHandler.RevokeCurrentToken)
+	}
 
 	// --- WebSocket Endpoints ---
 

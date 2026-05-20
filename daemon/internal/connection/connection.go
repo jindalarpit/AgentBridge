@@ -15,6 +15,10 @@ import (
 	"github.com/user/agentbridge/daemon/pkg/protocol"
 )
 
+// ErrAuthFailed is returned when the server responds with HTTP 401 during
+// WebSocket dial, indicating the authentication token is invalid or expired.
+var ErrAuthFailed = errors.New("authentication failed: token is invalid or expired")
+
 // sendBufferSize is the capacity of the outgoing message channel.
 const sendBufferSize = 256
 
@@ -60,15 +64,27 @@ func NewConnection(serverURL, token string) *Connection {
 
 // Connect establishes the WebSocket connection to the server using Bearer token
 // authentication and starts the read and write goroutines.
+// Returns ErrAuthFailed if the server responds with HTTP 401.
 func (c *Connection) Connect(ctx context.Context) error {
 	header := http.Header{}
 	header.Set("Authorization", "Bearer "+c.token)
 
 	dialer := websocket.DefaultDialer
 
-	conn, _, err := dialer.DialContext(ctx, c.serverURL, header)
+	conn, resp, err := dialer.DialContext(ctx, c.serverURL, header)
 	if err != nil {
+		// Check if the HTTP response indicates an authentication failure.
+		if resp != nil && resp.StatusCode == http.StatusUnauthorized {
+			resp.Body.Close()
+			return ErrAuthFailed
+		}
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
+		}
 		return fmt.Errorf("websocket dial: %w", err)
+	}
+	if resp != nil && resp.Body != nil {
+		resp.Body.Close()
 	}
 
 	c.connMu.Lock()

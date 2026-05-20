@@ -190,8 +190,11 @@ func TestWSRouter_ChatSend_Success(t *testing.T) {
 	if task.Content != "Hello, agent!" {
 		t.Errorf("task.Content = %q, want %q", task.Content, "Hello, agent!")
 	}
-	if task.RuntimeID != runtimeID {
-		t.Errorf("task.RuntimeID = %q, want %q", task.RuntimeID, runtimeID)
+	// The router overrides RuntimeID with the agent_type so the daemon can
+	// resolve it to a binary path (daemon maps by agent_type, not server IDs).
+	expectedAgentType := "claude"
+	if task.RuntimeID != expectedAgentType {
+		t.Errorf("task.RuntimeID = %q, want %q (agent_type)", task.RuntimeID, expectedAgentType)
 	}
 }
 

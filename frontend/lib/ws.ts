@@ -126,7 +126,12 @@ export class WsClient {
     }
 
     this.intentionalClose = false;
-    const wsUrl = `${this.url}/ws/client?token=${encodeURIComponent(this.token)}`;
+    // If the URL already includes a path (e.g., /ws/client), use it directly.
+    // Otherwise, append the default path.
+    const hasPath = new URL(this.url).pathname !== "/";
+    const wsUrl = hasPath
+      ? `${this.url}?token=${encodeURIComponent(this.token)}`
+      : `${this.url}/ws/client?token=${encodeURIComponent(this.token)}`;
 
     this.ws = new WebSocket(wsUrl);
 

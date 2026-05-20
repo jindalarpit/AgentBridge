@@ -17,6 +17,7 @@ import (
 	"github.com/user/agentbridge/server/internal/daemonws"
 	"github.com/user/agentbridge/server/internal/handler"
 	"github.com/user/agentbridge/server/internal/service"
+	"github.com/user/agentbridge/server/pkg/db"
 	"github.com/user/agentbridge/server/pkg/protocol"
 )
 
@@ -119,6 +120,13 @@ func main() {
 	sessionHandler := handler.NewSessionHandler(chatSvc)
 	runtimeHandler := handler.NewRuntimeHandler(runtimeSvc, chatSvc)
 
+	// Daemon token handler (requires database).
+	var daemonTokenHandler *handler.DaemonTokenHandler
+	if dbPool != nil {
+		queries := db.New(dbPool)
+		daemonTokenHandler = handler.NewDaemonTokenHandler(queries)
+	}
+
 	// --- HTTP Router ---
 	routerCfg := handler.RouterConfig{
 		JWTSecret:    cfg.JWTSecret,
@@ -127,11 +135,12 @@ func main() {
 	}
 
 	routerDeps := handler.RouterDeps{
-		AuthHandler:    authHandler,
-		SessionHandler: sessionHandler,
-		RuntimeHandler: runtimeHandler,
-		ClientHub:      clientHub,
-		DaemonHub:      daemonHub,
+		AuthHandler:        authHandler,
+		SessionHandler:     sessionHandler,
+		RuntimeHandler:     runtimeHandler,
+		DaemonTokenHandler: daemonTokenHandler,
+		ClientHub:          clientHub,
+		DaemonHub:          daemonHub,
 	}
 
 	router := handler.NewRouter(routerCfg, routerDeps)
@@ -192,6 +201,7 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 		file    string
 	}{
 		{version: "001_initial_schema", file: "migrations/001_initial_schema.up.sql"},
+		{version: "002_daemon_tokens", file: "migrations/002_daemon_tokens.up.sql"},
 	}
 
 	for _, m := range migrations {

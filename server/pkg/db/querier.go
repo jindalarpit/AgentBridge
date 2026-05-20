@@ -13,6 +13,11 @@ import (
 type Querier interface {
 	AddToMessageBuffer(ctx context.Context, arg AddToMessageBufferParams) (MessageBuffer, error)
 	ArchiveChatSession(ctx context.Context, id pgtype.UUID) error
+	CreateDaemonToken(ctx context.Context, arg CreateDaemonTokenParams) (DaemonToken, error)
+	DeleteDaemonTokenByHash(ctx context.Context, tokenHash string) error
+	DeleteDaemonTokensByUserID(ctx context.Context, userID pgtype.UUID) error
+	GetDaemonTokenByHash(ctx context.Context, tokenHash string) (DaemonToken, error)
+	UpdateDaemonTokenLastUsed(ctx context.Context, id pgtype.UUID) error
 	CleanupExpiredBufferMessages(ctx context.Context) error
 	CountBufferedMessages(ctx context.Context, userID pgtype.UUID) (int64, error)
 	CountChatSessionsByUser(ctx context.Context, userID pgtype.UUID) (int64, error)

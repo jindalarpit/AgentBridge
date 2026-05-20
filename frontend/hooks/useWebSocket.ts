@@ -6,6 +6,8 @@ import { getToken } from "@/lib/api";
 import {
   useAuthStore,
   useConnectionStore,
+  useMessageStore,
+  ChatMessage,
   handleChatStream,
   handleChatDone,
   handleChatError,
@@ -65,6 +67,10 @@ export function useWebSocket() {
 
     client.setOnMessage((msg: WsMessage) => {
       switch (msg.type) {
+        case "chat:message":
+          // Server confirms a message was persisted — add it to the message store
+          useMessageStore.getState().addMessage(msg.payload as ChatMessage);
+          break;
         case "chat:stream":
           handleChatStream(msg.payload as Parameters<typeof handleChatStream>[0]);
           break;

@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -102,22 +103,119 @@ func TestGetDataDir_Override(t *testing.T) {
 }
 
 func TestLoadConfig_MissingToken(t *testing.T) {
+	// No env var token and no config file — should fail with guidance message.
 	t.Setenv("AGENTBRIDGE_TOKEN", "")
 	t.Setenv("AGENTBRIDGE_USER_ID", "user-123")
 
+	// Point HOME to a temp dir so no config file is found.
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
 	_, err := loadConfig()
 	if err == nil {
-		t.Error("expected error when AGENTBRIDGE_TOKEN is missing")
+		t.Error("expected error when no token is available")
+	}
+	if err != nil && !strings.Contains(err.Error(), "agentbridge-daemon login") {
+		t.Errorf("expected guidance message mentioning 'agentbridge-daemon login', got: %v", err)
 	}
 }
 
-func TestLoadConfig_MissingUserID(t *testing.T) {
+func TestLoadConfig_ErrorMessageDoesNotExposeToken(t *testing.T) {
+	// When loadConfig fails, the error message should never contain token values.
+	// Test with a whitespace-only token (treated as empty).
+	t.Setenv("AGENTBRIDGE_TOKEN", "   ")
+	t.Setenv("AGENTBRIDGE_USER_ID", "user-123")
+
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	// Create a config file with a whitespace-only token.
+	configDir := filepath.Join(tmpDir, ".agentbridge")
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{"token": "   "}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := loadConfig()
+	if err == nil {
+		t.Fatal("expected error when token is whitespace-only")
+	}
+
+	// The error message should not contain any token-like values.
+	errMsg := err.Error()
+	if strings.Contains(errMsg, "ab_") {
+		t.Errorf("error message should not expose token prefix, got: %v", errMsg)
+	}
+	// Verify it gives guidance instead.
+	if !strings.Contains(errMsg, "agentbridge-daemon login") {
+		t.Errorf("expected guidance message, got: %v", errMsg)
+	}
+}
+
+func TestLoadConfig_MissingUserID_WithEnvToken(t *testing.T) {
+	// When token comes from env var, AGENTBRIDGE_USER_ID is required.
 	t.Setenv("AGENTBRIDGE_TOKEN", "some-token")
 	t.Setenv("AGENTBRIDGE_USER_ID", "")
 
 	_, err := loadConfig()
 	if err == nil {
-		t.Error("expected error when AGENTBRIDGE_USER_ID is missing")
+		t.Error("expected error when AGENTBRIDGE_USER_ID is missing with env var token")
+	}
+}
+
+func TestLoadConfig_MissingUserID_WithConfigFileToken(t *testing.T) {
+	// When token comes from config file, AGENTBRIDGE_USER_ID is NOT required.
+	t.Setenv("AGENTBRIDGE_TOKEN", "")
+	t.Setenv("AGENTBRIDGE_USER_ID", "")
+
+	// Create a config file with a token.
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	configDir := filepath.Join(tmpDir, ".agentbridge")
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	configData := []byte(`{"token": "ab_testtoken1234567890abcdef1234567890abcdef1234567890abcdef12345678"}`)
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), configData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig()
+	if err != nil {
+		t.Fatalf("expected no error when token comes from config file without USER_ID, got: %v", err)
+	}
+
+	if cfg.UserID != "" {
+		t.Errorf("expected empty UserID when token comes from config file, got %q", cfg.UserID)
+	}
+}
+
+func TestLoadConfig_ConfigFileToken_IgnoresUserID(t *testing.T) {
+	// When token comes from config file, AGENTBRIDGE_USER_ID should be ignored.
+	t.Setenv("AGENTBRIDGE_TOKEN", "")
+	t.Setenv("AGENTBRIDGE_USER_ID", "should-be-ignored")
+
+	// Create a config file with a token.
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	configDir := filepath.Join(tmpDir, ".agentbridge")
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	configData := []byte(`{"token": "ab_testtoken1234567890abcdef1234567890abcdef1234567890abcdef12345678"}`)
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), configData, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.UserID != "" {
+		t.Errorf("expected UserID to be ignored (empty) when token comes from config file, got %q", cfg.UserID)
 	}
 }
 

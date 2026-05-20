@@ -2,6 +2,7 @@ package connection
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -15,6 +16,9 @@ import (
 // using exponential backoff. When the underlying connection is lost, it
 // automatically attempts to reconnect and re-sends the DaemonRegister message
 // on success via the onReconnect callback.
+//
+// If a 401 authentication error is received during reconnection, the loop stops
+// immediately and the error is sent on the AuthErr channel.
 type ReconnectingConnection struct {
 	serverURL string
 	token     string
@@ -30,6 +34,10 @@ type ReconnectingConnection struct {
 	stopped atomic.Bool
 
 	monitorDone chan struct{} // closed when monitor goroutine exits
+
+	// AuthErr receives ErrAuthFailed when a 401 is encountered during reconnection.
+	// The caller should select on this channel and exit with code 2 when it fires.
+	AuthErr chan error
 }
 
 // NewReconnectingConnection creates a new ReconnectingConnection configured to
@@ -42,17 +50,22 @@ func NewReconnectingConnection(serverURL, token string, onReconnect func()) *Rec
 		token:       token,
 		onReconnect: onReconnect,
 		monitorDone: make(chan struct{}),
+		AuthErr:     make(chan error, 1),
 	}
 }
 
 // Start establishes the initial connection and starts the monitoring goroutine
 // that handles automatic reconnection on connection loss.
+// Returns ErrAuthFailed if the server responds with HTTP 401 during initial connect.
 func (rc *ReconnectingConnection) Start(ctx context.Context) error {
 	rc.ctx, rc.cancel = context.WithCancel(ctx)
 
 	conn := NewConnection(rc.serverURL, rc.token)
 
 	if err := conn.Connect(rc.ctx); err != nil {
+		if errors.Is(err, ErrAuthFailed) {
+			return ErrAuthFailed
+		}
 		return fmt.Errorf("initial connection failed: %w", err)
 	}
 
@@ -187,6 +200,17 @@ func (rc *ReconnectingConnection) reconnectLoop() {
 
 		if err := newConn.Connect(rc.ctx); err != nil {
 			log.Printf("reconnect: attempt %d failed: %v", attempt, err)
+			// If the server returned 401, stop reconnecting immediately.
+			// The token is invalid/expired and retrying won't help.
+			if errors.Is(err, ErrAuthFailed) {
+				log.Printf("reconnect: authentication failed, stopping reconnection loop")
+				// Notify the caller via the AuthErr channel.
+				select {
+				case rc.AuthErr <- ErrAuthFailed:
+				default:
+				}
+				return
+			}
 			continue
 		}
 

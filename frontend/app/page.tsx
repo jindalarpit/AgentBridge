@@ -1,15 +1,29 @@
 "use client";
 
-import { useState, FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useState, FormEvent, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { login, register, setToken, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/lib/store";
+import { validateCliCallback, buildCliRedirectUrl } from "@/lib/cli-callback";
 
 type Mode = "login" | "register";
 
 export default function AuthPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const authLogin = useAuthStore((s) => s.login);
+
+  // Read CLI callback params from URL
+  const cliCallback = searchParams.get("cli_callback");
+  const cliState = searchParams.get("cli_state");
+
+  // Validate the callback URL once
+  const validCliCallback = useMemo(
+    () => (validateCliCallback(cliCallback) ? cliCallback : null),
+    [cliCallback]
+  );
+
+  const [cliSuccess, setCliSuccess] = useState(false);
 
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
@@ -51,6 +65,19 @@ export default function AuthPage() {
       );
 
       setToken(res.token);
+
+      // If valid CLI callback is present, redirect to callback URL
+      if (validCliCallback) {
+        const redirectUrl = buildCliRedirectUrl(
+          validCliCallback,
+          res.token,
+          cliState
+        );
+        setCliSuccess(true);
+        window.location.href = redirectUrl;
+        return;
+      }
+
       router.push("/chat");
     } catch (err) {
       if (err instanceof ApiError) {
@@ -64,6 +91,22 @@ export default function AuthPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  // Show success message for CLI callback flow
+  if (cliSuccess) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+        <div className="w-full max-w-sm text-center">
+          <h1 className="text-2xl font-bold text-gray-900">AgentBridge</h1>
+          <div className="mt-6 rounded-md bg-green-50 p-4">
+            <p className="text-sm font-medium text-green-800">
+              Authentication successful — you can close this tab
+            </p>
+          </div>
+        </div>
+      </main>
+    );
   }
 
   return (

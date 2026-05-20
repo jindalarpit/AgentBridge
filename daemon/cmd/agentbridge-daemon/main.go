@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/user/agentbridge/daemon/internal/agent"
+	"github.com/user/agentbridge/daemon/internal/config"
 	"github.com/user/agentbridge/daemon/internal/connection"
 	"github.com/user/agentbridge/daemon/internal/executor"
 	"github.com/user/agentbridge/daemon/internal/heartbeat"
@@ -42,6 +43,10 @@ const (
 
 	// statusUpdateInterval is how often the daemon writes its status file.
 	statusUpdateInterval = 2 * time.Second
+
+	// exitCodeAuthFailure is the exit code used when the daemon exits due to
+	// authentication failure (401 from server).
+	exitCodeAuthFailure = 2
 )
 
 // DaemonStatus represents the daemon's current state, serialized to the status file.
@@ -54,6 +59,14 @@ type DaemonStatus struct {
 	UpdatedAt       time.Time           `json:"updated_at"`
 }
 
+// exitError is an error that carries a specific exit code.
+type exitError struct {
+	code int
+	msg  string
+}
+
+func (e *exitError) Error() string { return e.msg }
+
 func main() {
 	if len(os.Args) < 2 {
 		printUsage()
@@ -65,6 +78,9 @@ func main() {
 	case "start":
 		if err := runStart(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			if exitErr, ok := err.(*exitError); ok {
+				os.Exit(exitErr.code)
+			}
 			os.Exit(1)
 		}
 	case "stop":
@@ -74,6 +90,29 @@ func main() {
 		}
 	case "status":
 		if err := runStatus(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	case "login":
+		serverURL := os.Getenv("AGENTBRIDGE_SERVER_URL")
+		if serverURL == "" {
+			serverURL = "http://localhost:8080"
+		}
+		appURL := os.Getenv("AGENTBRIDGE_APP_URL")
+		if appURL == "" {
+			appURL = "http://localhost:3000"
+		}
+		if err := runLogin(serverURL, appURL); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	case "logout":
+		configPath, err := config.DefaultPath()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+		if err := runLogout(configPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -94,9 +133,12 @@ Commands:
   start    Start the daemon (background process)
   stop     Stop the running daemon
   status   Show daemon status
+  login    Authenticate via browser and store a long-lived daemon token
+  logout   Revoke the stored daemon token and deauthorize this machine
 
 Environment Variables:
-  AGENTBRIDGE_SERVER_URL   Server WebSocket URL (default: %s)
+  AGENTBRIDGE_SERVER_URL   Server URL (default: %s)
+  AGENTBRIDGE_APP_URL      Frontend app URL for login flow (default: http://localhost:3000)
   AGENTBRIDGE_TOKEN        Authentication token for server connection
   AGENTBRIDGE_USER_ID      User ID for daemon registration
   AGENTBRIDGE_DAEMON_ID    Daemon ID (default: hostname-based)
@@ -429,6 +471,13 @@ func runDaemonProcess() error {
 	if err := conn.Connect(connectCtx); err != nil {
 		// Remove PID file on connection failure.
 		os.Remove(pidPath)
+		if errors.Is(err, connection.ErrAuthFailed) {
+			logger.Printf("authentication failed: token is invalid or expired")
+			return &exitError{
+				code: exitCodeAuthFailure,
+				msg:  "Authentication failed. Run 'agentbridge-daemon login' to re-authenticate.",
+			}
+		}
 		logger.Printf("failed to connect to server: %v", err)
 		return fmt.Errorf("failed to connect to server: %w", err)
 	}
@@ -577,22 +626,46 @@ type daemonConfig struct {
 	DaemonID  string
 }
 
-// loadConfig reads daemon configuration from environment variables.
+// loadConfig reads daemon configuration using token resolution (env var > config file)
+// and environment variables for other settings.
 func loadConfig() (*daemonConfig, error) {
 	serverURL := os.Getenv("AGENTBRIDGE_SERVER_URL")
 	if serverURL == "" {
 		serverURL = defaultServerURL
 	}
 
-	token := os.Getenv("AGENTBRIDGE_TOKEN")
-	if token == "" {
-		return nil, errors.New("AGENTBRIDGE_TOKEN environment variable is required")
+	// Resolve token using precedence: AGENTBRIDGE_TOKEN env var > config file.
+	configPath, err := config.DefaultPath()
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine config path: %w", err)
 	}
 
-	userID := os.Getenv("AGENTBRIDGE_USER_ID")
-	if userID == "" {
-		return nil, errors.New("AGENTBRIDGE_USER_ID environment variable is required")
+	token, err := config.ResolveToken(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve authentication token: %w", err)
 	}
+
+	if token == "" {
+		return nil, errors.New("No authentication token found. Run 'agentbridge-daemon login' to authenticate, or set AGENTBRIDGE_TOKEN environment variable.")
+	}
+
+	// Determine if the token came from the env var or the config file.
+	// If AGENTBRIDGE_TOKEN env var is set and non-whitespace, it was the source.
+	tokenFromEnv := !config.IsTokenEmpty(os.Getenv("AGENTBRIDGE_TOKEN"))
+
+	// UserID handling:
+	// - When token comes from config file: do NOT require AGENTBRIDGE_USER_ID
+	//   (the server derives user_id from the ab_ token)
+	// - When token comes from env var AND AGENTBRIDGE_USER_ID is set: use it
+	//   (backward compatibility for CI/automation)
+	var userID string
+	if tokenFromEnv {
+		userID = os.Getenv("AGENTBRIDGE_USER_ID")
+		if userID == "" {
+			return nil, errors.New("AGENTBRIDGE_USER_ID environment variable is required when using AGENTBRIDGE_TOKEN")
+		}
+	}
+	// When token comes from config file, userID remains "" — server derives it from token.
 
 	daemonID := os.Getenv("AGENTBRIDGE_DAEMON_ID")
 	if daemonID == "" {
