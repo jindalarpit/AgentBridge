@@ -31,19 +31,22 @@ export default function ChatSessionPage({
 
   // Load messages for this session
   useEffect(() => {
+    let cancelled = false;
     async function loadMessages() {
       try {
         const result = await getMessages(sessionId);
+        if (cancelled) return;
         // The API returns { messages: [...] }
         const msgs = Array.isArray(result) ? result : (result as unknown as { messages: ChatMessageType[] }).messages ?? [];
         setMessages(msgs);
       } catch (err) {
         console.error("Failed to load messages:", err);
-        setMessages([]);
+        if (!cancelled) setMessages([]);
       }
     }
     clearMessages();
     loadMessages();
+    return () => { cancelled = true; };
   }, [sessionId, setMessages, clearMessages]);
 
   // Auto-scroll to bottom when new messages arrive

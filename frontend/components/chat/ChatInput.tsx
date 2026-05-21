@@ -96,6 +96,18 @@ export function ChatInput({ onSend }: ChatInputProps = {}) {
       return;
     }
 
+    // Optimistically add the user message to the store immediately
+    const userMessage: import("@/lib/store").ChatMessage = {
+      id: `temp-${Date.now()}`,
+      chat_session_id: activeSessionId,
+      role: "user",
+      content: trimmed,
+      status: "complete",
+      seq: Date.now(),
+      created_at: new Date().toISOString(),
+    };
+    useMessageStore.getState().addMessage(userMessage);
+
     // Send via WebSocket
     const wsClient = getWsClient();
     wsClient.send("chat:send", {

@@ -186,7 +186,7 @@ func runLogin(serverURL, appURL string) error {
 
 	// Step 2: Construct the login URL.
 	callbackURL := fmt.Sprintf("http://localhost:%d/callback", cs.Port())
-	loginURL := fmt.Sprintf("%s/login?cli_callback=%s&cli_state=%s",
+	loginURL := fmt.Sprintf("%s?cli_callback=%s&cli_state=%s",
 		appURL,
 		url.QueryEscape(callbackURL),
 		url.QueryEscape(cs.State()),
@@ -219,8 +219,8 @@ func runLogin(serverURL, appURL string) error {
 		return fmt.Errorf("token exchange failed: %w", err)
 	}
 
-	// Step 6: Get user email.
-	email, err := client.GetMe(ctx, daemonToken)
+	// Step 6: Get user email (use the original JWT, not the daemon token).
+	email, err := client.GetMe(ctx, jwt)
 	if err != nil {
 		return fmt.Errorf("failed to get user info: %w", err)
 	}

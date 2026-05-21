@@ -196,9 +196,17 @@ export function SessionList() {
                   />
                 </div>
               ) : (
-                <button
+                <div
                   onClick={() => handleSelectSession(session.id)}
-                  className={`group flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleSelectSession(session.id);
+                    }
+                  }}
+                  className={`group flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors cursor-pointer ${
                     activeSessionId === session.id
                       ? "bg-blue-50 text-blue-700"
                       : "text-gray-700 hover:bg-gray-100"
@@ -221,7 +229,7 @@ export function SessionList() {
                   >
                     <EllipsisIcon />
                   </button>
-                </button>
+                </div>
               )}
 
               {/* Context menu */}

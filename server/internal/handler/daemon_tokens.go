@@ -83,16 +83,9 @@ func (h *DaemonTokenHandler) CreateToken(w http.ResponseWriter, r *http.Request)
 	// Calculate expiry time.
 	expiresAt := time.Now().Add(time.Duration(req.ExpiresInDays) * 24 * time.Hour)
 
-	// Parse user ID into pgtype.UUID.
-	var userUUID pgtype.UUID
-	if err := userUUID.Scan(userID); err != nil {
-		writeError(w, http.StatusInternalServerError, "invalid user ID")
-		return
-	}
-
 	// Insert record into daemon_tokens table.
 	_, err := h.queries.CreateDaemonToken(r.Context(), db.CreateDaemonTokenParams{
-		UserID:    userUUID,
+		UserID:    userID,
 		Name:      req.Name,
 		TokenHash: tokenHash,
 		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},

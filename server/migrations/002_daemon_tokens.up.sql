@@ -3,7 +3,7 @@
 
 CREATE TABLE daemon_tokens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
     name TEXT NOT NULL CHECK (char_length(name) <= 100),
     token_hash TEXT NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL,

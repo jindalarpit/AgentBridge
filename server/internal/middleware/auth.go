@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -146,9 +145,8 @@ func authenticateDaemonToken(ctx context.Context, token string, queries DaemonTo
 		return "", pgtype.UUID{}, err
 	}
 
-	// Format user_id UUID as standard string (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx).
-	b := record.UserID.Bytes
-	userID := fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+	// User ID is stored as a string directly.
+	userID := record.UserID
 
 	return userID, record.ID, nil
 }

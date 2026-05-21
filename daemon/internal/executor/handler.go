@@ -104,8 +104,8 @@ func (h *TaskHandler) resolveBinaryPath(runtimeID string) (string, error) {
 }
 
 // streamTokens reads tokens from the channel and sends them as protocol messages.
-// For regular tokens, it sends chat:stream messages. On Done, it sends chat:done.
-// On Error, it sends chat:error.
+// For regular tokens, it parses Claude stream-json format to extract text content.
+// On Done, it sends chat:done. On Error, it sends chat:error.
 func (h *TaskHandler) streamTokens(sessionID, messageID string, tokenCh <-chan StreamToken) {
 	var contentParts []string
 
@@ -122,16 +122,22 @@ func (h *TaskHandler) streamTokens(sessionID, messageID string, tokenCh <-chan S
 
 		if token.Done {
 			// Send chat:done with the full concatenated content.
-			fullContent := strings.Join(contentParts, "\n")
+			fullContent := strings.Join(contentParts, "")
 			h.sendDone(sessionID, messageID, fullContent, token.ElapsedMs)
 			return
 		}
 
+		// Try to extract text from Claude's stream-json format.
+		text := extractTextFromStreamJSON(token.Content)
+		if text == "" {
+			continue // Skip non-text lines (init, rate_limit, thinking, etc.)
+		}
+
 		// Accumulate content for the final done message.
-		contentParts = append(contentParts, token.Content)
+		contentParts = append(contentParts, text)
 
 		// Send streaming token to server.
-		h.sendStream(sessionID, token.Seq, token.Content)
+		h.sendStream(sessionID, token.Seq, text)
 	}
 }
 
@@ -220,4 +226,84 @@ func RegisterWithConnection(conn ServerConnection, executor *Executor, runtimeRe
 	handler := NewTaskHandler(executor, conn.Send, runtimeResolver)
 	conn.OnMessage(handler.HandleMessage)
 	return handler
+}
+
+// extractTextFromStreamJSON parses a line of Claude's stream-json output and
+// extracts the text content. Returns empty string for non-text events (init,
+// rate_limit, thinking, system messages).
+//
+// Claude stream-json format produces lines like:
+//   {"type":"result","result":"Hello!","stop_reason":"end_turn",...}
+//   {"type":"assistant","message":{"content":[{"type":"text","text":"Hello!"}],...}}
+//
+// We extract text from:
+// 1. "result" type events → use the "result" field
+// 2. "assistant" type events with text content → use content[].text where type=="text"
+func extractTextFromStreamJSON(line string) string {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return ""
+	}
+
+	// Try to parse as JSON.
+	var event map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(line), &event); err != nil {
+		// Not JSON — return as-is (might be plain text from non-Claude agents).
+		return line
+	}
+
+	// Get the event type.
+	var eventType string
+	if raw, ok := event["type"]; ok {
+		json.Unmarshal(raw, &eventType)
+	}
+
+	switch eventType {
+	case "result":
+		// Extract the "result" field which contains the final text.
+		var result string
+		if raw, ok := event["result"]; ok {
+			json.Unmarshal(raw, &result)
+		}
+		return result
+
+	case "assistant":
+		// Extract text from message.content[].text where content type is "text".
+		// Only extract if stop_reason is present (final message, not intermediate).
+		var stopReason json.RawMessage
+		if msgRaw, ok := event["message"]; ok {
+			var msgObj map[string]json.RawMessage
+			if json.Unmarshal(msgRaw, &msgObj) == nil {
+				stopReason = msgObj["stop_reason"]
+			}
+		}
+		// Skip intermediate assistant messages (stop_reason is null)
+		if stopReason == nil || string(stopReason) == "null" {
+			return ""
+		}
+		var msg struct {
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		}
+		if raw, ok := event["message"]; ok {
+			json.Unmarshal(raw, &msg)
+		}
+		var texts []string
+		for _, c := range msg.Content {
+			if c.Type == "text" && c.Text != "" {
+				texts = append(texts, c.Text)
+			}
+		}
+		return strings.Join(texts, "")
+
+	case "system", "rate_limit_event":
+		// Skip system/rate-limit events.
+		return ""
+
+	default:
+		// Unknown type — skip.
+		return ""
+	}
 }

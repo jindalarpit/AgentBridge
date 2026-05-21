@@ -18,7 +18,7 @@ RETURNING id, user_id, name, token_hash, expires_at, created_at, last_used_at
 `
 
 type CreateDaemonTokenParams struct {
-	UserID    pgtype.UUID        `json:"user_id"`
+	UserID    string             `json:"user_id"`
 	Name      string             `json:"name"`
 	TokenHash string             `json:"token_hash"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`

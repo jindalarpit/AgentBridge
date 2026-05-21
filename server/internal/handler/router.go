@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"log"
 	"net/http"
 	"strings"
@@ -131,6 +134,7 @@ func NewRouter(cfg RouterConfig, deps RouterDeps) chi.Router {
 
 	// Daemon WebSocket: /ws/daemon (Authorization: Bearer <token>)
 	// Authentication is done via the Authorization header.
+	// Supports both JWT tokens and ab_ daemon tokens.
 	r.Get("/ws/daemon", func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		token := daemonws.ExtractBearerToken(authHeader)
@@ -139,17 +143,35 @@ func NewRouter(cfg RouterConfig, deps RouterDeps) chi.Router {
 			return
 		}
 
-		claims, err := auth.ValidateToken(token, cfg.JWTSecret)
-		if err != nil {
-			http.Error(w, `{"error":"invalid or expired token"}`, http.StatusUnauthorized)
-			return
+		var userID string
+
+		if strings.HasPrefix(token, "ab_") && deps.DaemonTokenHandler != nil && deps.DaemonTokenHandler.queries != nil {
+			// Daemon token: hash-based lookup.
+			tokenHash := sha256Hex(token)
+			record, err := deps.DaemonTokenHandler.queries.GetDaemonTokenByHash(r.Context(), tokenHash)
+			if err != nil {
+				http.Error(w, `{"error":"invalid or expired token"}`, http.StatusUnauthorized)
+				return
+			}
+			userID = record.UserID
+
+			// Update last_used_at asynchronously.
+			go deps.DaemonTokenHandler.queries.UpdateDaemonTokenLastUsed(context.Background(), record.ID)
+		} else {
+			// JWT token: validate signature.
+			claims, err := auth.ValidateToken(token, cfg.JWTSecret)
+			if err != nil {
+				http.Error(w, `{"error":"invalid or expired token"}`, http.StatusUnauthorized)
+				return
+			}
+			userID = claims.UserID
 		}
 
 		// The daemon identity uses the user ID from the token. The actual daemon_id
 		// will be provided in the daemon:register message after the WebSocket is established.
 		identity := daemonws.DaemonIdentity{
 			DaemonID: "", // Will be set upon daemon:register message
-			UserID:   claims.UserID,
+			UserID:   userID,
 		}
 
 		deps.DaemonHub.HandleWebSocket(w, r, identity)
@@ -309,4 +331,10 @@ func rateLimitMiddleware(rps int) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// sha256Hex computes the SHA-256 hash of a string and returns it as a lowercase hex string.
+func sha256Hex(s string) string {
+	h := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(h[:])
 }

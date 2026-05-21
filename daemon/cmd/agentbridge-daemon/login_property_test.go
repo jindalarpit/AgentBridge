@@ -25,7 +25,7 @@ func TestProperty_LoginURLHasCorrectSchemeAndHost(t *testing.T) {
 		appURL := "https://app.example.com"
 
 		callbackURL := fmt.Sprintf("http://localhost:%d/callback", port)
-		loginURL := fmt.Sprintf("%s/login?cli_callback=%s&cli_state=%s",
+		loginURL := fmt.Sprintf("%s?cli_callback=%s&cli_state=%s",
 			appURL,
 			url.QueryEscape(callbackURL),
 			url.QueryEscape(stateHex),
@@ -52,7 +52,7 @@ func TestProperty_LoginURLHasCorrectPath(t *testing.T) {
 		appURL := "https://app.example.com"
 
 		callbackURL := fmt.Sprintf("http://localhost:%d/callback", port)
-		loginURL := fmt.Sprintf("%s/login?cli_callback=%s&cli_state=%s",
+		loginURL := fmt.Sprintf("%s?cli_callback=%s&cli_state=%s",
 			appURL,
 			url.QueryEscape(callbackURL),
 			url.QueryEscape(stateHex),
@@ -63,8 +63,9 @@ func TestProperty_LoginURLHasCorrectPath(t *testing.T) {
 			t.Fatalf("failed to parse login URL: %v", err)
 		}
 
-		if parsed.Path != "/login" {
-			t.Fatalf("expected path '/login', got %q", parsed.Path)
+		// The login page is at the root path
+		if parsed.Path != "" {
+			t.Fatalf("expected empty path (root), got %q", parsed.Path)
 		}
 	})
 }
@@ -76,7 +77,7 @@ func TestProperty_LoginURLCallbackDecodesToLocalhost(t *testing.T) {
 		appURL := "https://app.example.com"
 
 		callbackURL := fmt.Sprintf("http://localhost:%d/callback", port)
-		loginURL := fmt.Sprintf("%s/login?cli_callback=%s&cli_state=%s",
+		loginURL := fmt.Sprintf("%s?cli_callback=%s&cli_state=%s",
 			appURL,
 			url.QueryEscape(callbackURL),
 			url.QueryEscape(stateHex),
@@ -102,7 +103,7 @@ func TestProperty_LoginURLStateDecodesToOriginal(t *testing.T) {
 		appURL := "https://app.example.com"
 
 		callbackURL := fmt.Sprintf("http://localhost:%d/callback", port)
-		loginURL := fmt.Sprintf("%s/login?cli_callback=%s&cli_state=%s",
+		loginURL := fmt.Sprintf("%s?cli_callback=%s&cli_state=%s",
 			appURL,
 			url.QueryEscape(callbackURL),
 			url.QueryEscape(stateHex),

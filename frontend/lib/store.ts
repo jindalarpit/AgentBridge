@@ -115,7 +115,28 @@ export const useMessageStore = create<MessageState>((set) => ({
   streamingContent: "",
   setMessages: (messages) => set({ messages }),
   addMessage: (message) =>
-    set((state) => ({ messages: [...state.messages, message] })),
+    set((state) => {
+      // Deduplicate: if a message with the same id already exists, skip.
+      // Also deduplicate optimistic user messages: if a temp-* message exists
+      // with the same role and content, replace it with the server-confirmed one.
+      const existsById = state.messages.some((m) => m.id === message.id);
+      if (existsById) return state;
+
+      // Check if this is a server echo of an optimistic user message
+      if (message.role === "user") {
+        const optimisticIdx = state.messages.findIndex(
+          (m) => m.id.startsWith("temp-") && m.role === "user" && m.content === message.content
+        );
+        if (optimisticIdx >= 0) {
+          // Replace the optimistic message with the server-confirmed one (preserving position)
+          const updated = [...state.messages];
+          updated[optimisticIdx] = message;
+          return { messages: updated };
+        }
+      }
+
+      return { messages: [...state.messages, message] };
+    }),
   appendStreamToken: (_sessionId, _seq, content) =>
     set((state) => ({
       isStreaming: true,
@@ -204,11 +225,17 @@ export function handleChatDone(payload: {
   elapsed_ms: number;
 }) {
   const { finalizeStream, messages } = useMessageStore.getState();
-  // Only add the message if it doesn't already exist (avoid duplicates from chat:message broadcast)
-  const exists = messages.some((m) => m.id === payload.message_id);
+  // The message_id from the daemon is actually the user message ID (from the task payload).
+  // Generate a unique ID for the assistant message to avoid overwriting the user message.
+  const assistantMsgId = `assistant-${payload.message_id}-${Date.now()}`;
+  
+  // Check if an assistant message with this content already exists (from chat:message broadcast)
+  const exists = messages.some(
+    (m) => m.role === "assistant" && m.content === payload.content && m.chat_session_id === payload.session_id
+  );
   if (!exists) {
     useMessageStore.getState().addMessage({
-      id: payload.message_id,
+      id: assistantMsgId,
       chat_session_id: payload.session_id,
       seq: 0,
       role: "assistant",
@@ -218,7 +245,7 @@ export function handleChatDone(payload: {
       created_at: new Date().toISOString(),
     });
   }
-  finalizeStream(payload.message_id, payload.content, payload.elapsed_ms);
+  finalizeStream(assistantMsgId, payload.content, payload.elapsed_ms);
 }
 
 export function handleChatError(payload: {

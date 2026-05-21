@@ -10,7 +10,7 @@ import (
 
 type DaemonToken struct {
 	ID         pgtype.UUID        `json:"id"`
-	UserID     pgtype.UUID        `json:"user_id"`
+	UserID     string             `json:"user_id"`
 	Name       string             `json:"name"`
 	TokenHash  string             `json:"token_hash"`
 	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`

@@ -6,7 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -84,8 +86,9 @@ func (e *Executor) Execute(ctx context.Context, req ExecutionRequest) (<-chan St
 	execCtx, cancel := context.WithTimeout(ctx, e.timeout)
 
 	// Build the command. Different agent CLIs have different invocation patterns.
+	// Run through the user's login shell so it inherits ~/.zshrc, ~/.bashrc, etc.
 	args := buildAgentArgs(req.BinaryPath, req.Content)
-	cmd := exec.CommandContext(execCtx, args[0], args[1:]...)
+	cmd := execViaLoginShell(execCtx, args)
 
 	// Pipe conversation history as JSON to stdin.
 	stdinPipe, err := cmd.StdinPipe()
@@ -251,7 +254,7 @@ func buildAgentArgs(binaryPath, content string) []string {
 	case "opencode":
 		return []string{binaryPath, "run", content}
 	case "claude":
-		return []string{binaryPath, "-p", content, "--output-format", "stream-json"}
+		return []string{binaryPath, "-p", content, "--output-format", "stream-json", "--verbose"}
 	default:
 		return []string{binaryPath, content}
 	}
@@ -265,4 +268,59 @@ func lastIndexByte(s string, c byte) int {
 		}
 	}
 	return -1
+}
+
+// execViaLoginShell runs the given args through the user's login shell
+// so that shell profile environment variables (like API keys) are available
+// to the agent process. It detects the user's shell from $SHELL and handles
+// Unix shells (zsh, bash, fish, sh) and Windows (cmd, powershell).
+func execViaLoginShell(ctx context.Context, args []string) *exec.Cmd {
+	shell := os.Getenv("SHELL")
+
+	// Build a properly quoted command string.
+	quoted := make([]string, len(args))
+	for i, a := range args {
+		quoted[i] = shellQuote(a)
+	}
+	cmdStr := strings.Join(quoted, " ")
+
+	// Detect shell type from the binary name.
+	shellName := shell
+	if idx := lastIndexByte(shellName, '/'); idx >= 0 {
+		shellName = shellName[idx+1:]
+	}
+
+	switch {
+	case shellName == "zsh":
+		return exec.CommandContext(ctx, shell, "-l", "-c", cmdStr)
+	case shellName == "bash":
+		return exec.CommandContext(ctx, shell, "-l", "-c", cmdStr)
+	case shellName == "fish":
+		return exec.CommandContext(ctx, shell, "-l", "-c", cmdStr)
+	case shellName == "cmd" || shellName == "cmd.exe":
+		// Windows cmd.exe
+		return exec.CommandContext(ctx, shell, "/C", cmdStr)
+	case shellName == "powershell" || shellName == "pwsh" || shellName == "powershell.exe" || shellName == "pwsh.exe":
+		// Windows PowerShell / pwsh
+		return exec.CommandContext(ctx, shell, "-NoProfile", "-Command", cmdStr)
+	case shell == "":
+		// No SHELL set — try platform defaults.
+		if _, err := exec.LookPath("zsh"); err == nil {
+			return exec.CommandContext(ctx, "zsh", "-l", "-c", cmdStr)
+		}
+		if _, err := exec.LookPath("bash"); err == nil {
+			return exec.CommandContext(ctx, "bash", "-l", "-c", cmdStr)
+		}
+		// Last resort: run directly without a shell wrapper.
+		return exec.CommandContext(ctx, args[0], args[1:]...)
+	default:
+		// Unknown shell — assume POSIX-compatible (supports -l -c).
+		return exec.CommandContext(ctx, shell, "-l", "-c", cmdStr)
+	}
+}
+
+// shellQuote wraps a string in single quotes for safe shell interpolation.
+func shellQuote(s string) string {
+	// Replace single quotes with '\'' (end quote, escaped quote, start quote).
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
